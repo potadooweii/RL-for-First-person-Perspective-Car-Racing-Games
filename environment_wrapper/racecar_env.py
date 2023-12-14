@@ -51,8 +51,8 @@ class CarRacingEnvironment:
 
 		return obs, reward, terminates, truncates, info
 	
-	def reset(self, seed: int = None):
-		obs, info = self.env.reset(seed=seed)
+	def reset(self, test: bool = False):
+		obs, info = self.env.reset(options=dict(mode='random'))
 		self.ep_len = 0
 
 		obs = self.resize_obs(obs)

@@ -60,14 +60,14 @@ class AtariNet(nn.Module):
         # map to valid action space
         mu_clone[:, 0] = (mu_clone[:, 0]+1)*0.5 + 0.1
         std = self.log_std.exp()
-        dist = normal.Normal(mu, std)
+        dist = normal.Normal(mu_clone, std)
 
         ### TODO ###
         # Finish the forward function
         # Return action, action probability, value, entropy
 
         if eval:
-            action = torch.squeeze(mu)
+            action = torch.squeeze(mu_clone)
         else:
             action = dist.sample()
 

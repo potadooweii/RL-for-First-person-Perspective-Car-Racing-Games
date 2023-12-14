@@ -67,7 +67,10 @@ class CarRacingTD3Agent(TD3BaseAgent):
 
 	def update_behavior_network(self):
 		# sample a minibatch of transitions
-		state, action, reward, next_state, done = self.replay_buffer.sample(self.batch_size, self.device)
+		if self.PER:
+			idxs, state, action, reward, next_state, done, is_weights = self.replay_buffer.sample(self.batch_size, self.device)
+		else:
+			state, action, reward, next_state, done = self.replay_buffer.sample(self.batch_size, self.device)
 		### TODO ###
 		### TD3 ###
 		# 1. Clipped Double Q-Learning for Actor-Critic
@@ -85,18 +88,28 @@ class CarRacingTD3Agent(TD3BaseAgent):
 			).clamp(self.min_action, self.max_action)
 
 			# Compute the target Q value
-			target_Q = self.target_critic_net1(next_state, next_action)
+			target_Q = torch.min(
+				self.target_critic_net1(next_state, next_action),
+				self.target_critic_net2(next_state, next_action),
+			).detach()
 			target_Q = reward + (1 - done) * self.gamma * target_Q
 
 		## Update Critic ##
-		
 		# critic loss & critic loss function
-		criterion = nn.MSELoss()
-
-		q_value1 = self.critic_net1(state, action)
-		critic_loss1 = criterion(q_value1, target_Q)
-		q_value2 = self.critic_net2(state, action)
-		critic_loss2 = criterion(q_value2, target_Q)
+		if self.PER:
+			criterion = self.weighted_mse
+			q_value1 = self.critic_net1(state, action)
+			critic_loss1 = criterion(q_value1, target_Q, is_weights)
+			q_value2 = self.critic_net2(state, action)
+			critic_loss2 = criterion(q_value2, target_Q, is_weights)
+			errors1 = np.abs((q_value1 - target_Q).detach().cpu().numpy())
+			self.replay_buffer.batch_update(idxs, errors1)
+		else:
+			criterion = nn.MSELoss()
+			q_value1 = self.critic_net1(state, action)
+			critic_loss1 = criterion(q_value1, target_Q)
+			q_value2 = self.critic_net2(state, action)
+			critic_loss2 = criterion(q_value2, target_Q)
 
 		# optimize critic
 		self.critic_net1.zero_grad()
@@ -120,4 +133,9 @@ class CarRacingTD3Agent(TD3BaseAgent):
 			self.actor_net.zero_grad()
 			actor_loss.backward()
 			self.actor_opt.step()
-		
+	
+	def weighted_mse(self, expected, targets, is_weights):
+		"""Custom loss function that takes into account the importance-sampling weights."""
+		td_error = expected - targets
+		weighted_squared_error = is_weights * td_error * td_error
+		return torch.sum(weighted_squared_error) / torch.numel(weighted_squared_error)

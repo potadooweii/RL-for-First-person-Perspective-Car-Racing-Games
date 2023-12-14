@@ -6,6 +6,7 @@ import time
 from collections import deque
 from torch.utils.tensorboard import SummaryWriter
 from replay_buffer.replay_buffer import ReplayMemory
+from replay_buffer.PER import PER
 from abc import ABC, abstractmethod
 
 
@@ -55,9 +56,13 @@ class TD3BaseAgent(ABC):
 		self.gamma = config["gamma"]
 		self.tau = config["tau"]
 		self.update_freq = config["update_freq"]
-	
-		self.replay_buffer = ReplayMemory(int(config["replay_buffer_capacity"]))
+		self.PER = config["PER"]
 		self.writer = SummaryWriter(config["logdir"])
+
+		if config["PER"]:
+			self.replay_buffer = PER(int(config["replay_buffer_capacity"]))
+		else:
+			self.replay_buffer = ReplayMemory(int(config["replay_buffer_capacity"]))
 
 	@abstractmethod
 	def decide_agent_actions(self, state, sigma=0.0):
@@ -114,7 +119,10 @@ class TD3BaseAgent(ABC):
 					action = self.decide_agent_actions(state, sigma=sigma)
 				
 				next_state, reward, terminates, truncates, _ = self.env.step(action)
-				self.replay_buffer.append(state, action, [reward/10], next_state, [int(terminates)])
+				if self.PER:
+					self.replay_buffer.append(state, action, [reward], next_state, [int(terminates)], error=reward)
+				else:
+					self.replay_buffer.append(state, action, [reward], next_state, [int(terminates)])
 				if self.total_time_step >= self.warmup_steps:
 					self.update()
 
