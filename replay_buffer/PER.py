@@ -23,7 +23,6 @@ class SumTree():
         # Number of leaf nodes (final nodes) that contains experiences
         # Should be power of 2.
         self.capacity = int(capacity)
-        assert is_power_of_2(self.capacity), "Capacity must be power of 2."
         
         # Generate the tree with all nodes values = 0
         # To understand this calculation (2 * capacity - 1) look at the schema above

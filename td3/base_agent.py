@@ -58,6 +58,7 @@ class TD3BaseAgent(ABC):
 		self.update_freq = config["update_freq"]
 		self.PER = config["PER"]
 		self.writer = SummaryWriter(config["logdir"])
+		self.scenario = config["scenario"]
 
 		if config["PER"]:
 			self.replay_buffer = PER(int(config["replay_buffer_capacity"]))
@@ -101,14 +102,14 @@ class TD3BaseAgent(ABC):
 	def train(self):
 		for episode in range(self.total_episode):
 			total_reward = 0
-			state, infos = self.env.reset()
+			state, infos = self.env.reset(test=True) if episode % 5 == 0 else self.env.reset()
 			self.noise.reset()
 
-			frac = 1.0 - episode / self.total_episode
-			lrnow = frac * self.lra
-			self.actor_opt.param_groups[0]["lr"] = lrnow
-			self.critic_opt1.param_groups[0]["lr"] = lrnow
-			self.critic_opt2.param_groups[0]["lr"] = lrnow
+			# frac = 1.0 - episode / self.total_episode
+			# lrnow = frac * self.lra
+			# self.actor_opt.param_groups[0]["lr"] = lrnow
+			# self.critic_opt1.param_groups[0]["lr"] = lrnow
+			# self.critic_opt2.param_groups[0]["lr"] = lrnow
 
 			for t in range(10000):
 				if self.total_time_step < self.warmup_steps:
@@ -136,6 +137,9 @@ class TD3BaseAgent(ABC):
 						.format(self.total_time_step, episode+1, t, total_reward))
 				
 					break
+
+				if self.total_time_step >= self.training_steps:
+					return
 			
 			if (episode+1) % self.eval_interval == 0:
 				# save model checkpoint
@@ -147,10 +151,9 @@ class TD3BaseAgent(ABC):
 		print("==============================================")
 		print("Evaluating...")
 		all_rewards = []
-		demo_seeds = [3219, 6728, 8844, 7022, 2713]
 		for episode in range(self.eval_episode):
 			total_reward = 0
-			state, infos = self.test_env.reset(seed=demo_seeds[episode])
+			state, infos = self.test_env.reset(test=True)
 			for t in range(10000):
 				action = self.decide_agent_actions(state)
 				next_state, reward, terminates, truncates, _ = self.test_env.step(action)

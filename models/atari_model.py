@@ -48,26 +48,30 @@ class AtariNet(nn.Module):
         if init_weights:
             self._initialize_weights()
 
-    def forward(self, x, eval=False, old_action=[]):
+    def forward(self, x, continuous=True, eval=False, old_action=[]):
         x = x.float() / 255.
         x = self.conv(x)
         x = torch.flatten(x, start_dim=1)
         value = self.critic(x)
         value = torch.squeeze(value)
 
-        mu = self.actor(x)
-        mu_clone = mu.clone()
-        # map to valid action space
-        mu_clone[:, 0] = (mu_clone[:, 0]+1)*0.5 + 0.1
-        std = self.log_std.exp()
-        dist = normal.Normal(mu_clone, std)
+        if continuous:
+            mu = self.actor(x)
+            mu_clone = mu.clone()
+            # map to valid action space
+            mu_clone[:, 0] = (mu_clone[:, 0])*0.5
+            std = self.log_std.exp()
+            dist = normal.Normal(mu_clone, std)
+        else:
+            logits = self.actor(x)
+            dist = Categorical(logits=logits)
 
         ### TODO ###
         # Finish the forward function
         # Return action, action probability, value, entropy
 
         if eval:
-            action = torch.squeeze(mu_clone)
+            action = torch.squeeze(mu_clone) if continuous else np.argmax(logits)
         else:
             action = dist.sample()
 

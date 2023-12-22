@@ -6,7 +6,7 @@ import time
 from collections import deque
 from torch.utils.tensorboard import SummaryWriter
 from replay_buffer.gae_replay_buffer import GaeSampleMemory
-from base_agent import PPOBaseAgent
+from ppo.base_agent import PPOBaseAgent
 from models.atari_model import AtariNet
 from environment_wrapper.racecar_env import CarRacingEnvironment
 
@@ -16,17 +16,18 @@ class AtariPPOAgent(PPOBaseAgent):
 		super(AtariPPOAgent, self).__init__(config)
 		### TODO ###
 		# initialize env
-		self.env = CarRacingEnvironment(test=False)
-		self.test_env = CarRacingEnvironment(test=True)
+		self.env = CarRacingEnvironment(self.scenario, test=False, continuous_action=self.continuous)
+		self.test_env = CarRacingEnvironment(self.scenario, test=True, continuous_action=self.continuous)
 
-		self.net = AtariNet(self.env.observation_shape[1], self.env.action_space.shape[0])
+		action_dim = self.env.action_space.shape[0]
+		self.net = AtariNet(self.env.observation_shape[1], action_dim)
 		self.net.to(self.device)
 		self.lr = config["learning_rate"]
 		self.update_count = config["update_ppo_epoch"]
 
-		self.optim = torch.optim.Adam(self.net.parameters(), lr=self.lr, eps=1e-5)
+		self.optim = torch.optim.AdamW(self.net.parameters(), lr=self.lr)
 		
-	def decide_agent_actions(self, observation, eval=False):
+	def decide_agent_actions(self, observation, continuous=True, eval=False):
 		### TODO ###
 		# add batch dimension in observation
 		# get action, value, logp from net
@@ -34,7 +35,7 @@ class AtariPPOAgent(PPOBaseAgent):
 		observation = torch.tensor(np.asarray(observation), dtype=torch.float, device=self.device).unsqueeze(0)
 
 		with torch.no_grad():
-			action, action_logprob, value, _ = self.net(observation, eval)
+			action, action_logprob, value, _ = self.net(observation, continuous=continuous, eval=eval)
 		
 		return action.detach().cpu().numpy(), value.detach().cpu().numpy(), action_logprob.detach().cpu().numpy()
 

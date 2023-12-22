@@ -26,6 +26,8 @@ class PPOBaseAgent(ABC):
 		self.entropy_coefficient = config["entropy_coefficient"]
 		self.eval_interval = config["eval_interval"]
 		self.eval_episode = config["eval_episode"]
+		self.continuous = config["continuous"]
+		self.scenario = config["scenario"]
 
 		self.gae_replay_buffer = GaeSampleMemory({
 			"horizon" : config["horizon"],
@@ -55,12 +57,12 @@ class PPOBaseAgent(ABC):
 		episode_idx = 0
 		
 		while self.total_time_step <= self.training_steps:
-			observation, info = self.env.reset()
+			observation, info = self.env.reset(test=True) if episode_idx % 5 == 0 else self.env.reset()
 			episode_reward = 0
 			episode_len = 0
 			episode_idx += 1
 			while True:
-				action, value, logp_pi = self.decide_agent_actions(observation)
+				action, value, logp_pi = self.decide_agent_actions(observation, continuous=self.continuous)
 				next_observation, reward, terminate, truncate, info = self.env.step(action[0])
 				# observation must be dict before storing into gae_replay_buffer
 				# dimension of reward, value, logp_pi, done must be the same
@@ -102,11 +104,11 @@ class PPOBaseAgent(ABC):
 		print("Evaluating...")
 		all_rewards = []
 		for i in range(self.eval_episode):
-			observation, info = self.test_env.reset(seed=321)
+			observation, info = self.test_env.reset(test=True)
 			total_reward = 0
 			while True:
-				# self.test_env.render()
 				action, _, _ = self.decide_agent_actions(observation, eval=True)
+				action = action if self.continuous else self.action_map(action)
 				next_observation, reward, terminate, truncate, info = self.test_env.step(action)
 				total_reward += reward
 				if terminate or truncate:
@@ -134,4 +136,3 @@ class PPOBaseAgent(ABC):
 	def load_and_evaluate(self, load_path):
 		self.load(load_path)
 		self.evaluate()
-

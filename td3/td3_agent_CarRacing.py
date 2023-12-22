@@ -1,18 +1,18 @@
 import torch
 import torch.nn as nn
 import numpy as np
-from base_agent import TD3BaseAgent
+from td3.base_agent import TD3BaseAgent
 from models.CarRacing_model import ActorNetSimple, CriticNetSimple
 from environment_wrapper.racecar_env import CarRacingEnvironment
 import random
-from base_agent import OUNoiseGenerator, GaussianNoise
+from td3.base_agent import OUNoiseGenerator, GaussianNoise
 
 class CarRacingTD3Agent(TD3BaseAgent):
 	def __init__(self, config):
 		super(CarRacingTD3Agent, self).__init__(config)
 		# initialize environment
-		self.env = CarRacingEnvironment(test=False)
-		self.test_env = CarRacingEnvironment(test=True)
+		self.env = CarRacingEnvironment(self.scenario, test=False)
+		self.test_env = CarRacingEnvironment(self.scenario, test=True)
 		
 		# behavior network
 		self.actor_net = ActorNetSimple(self.env.observation_shape[1], self.env.action_space.shape[0], self.env.observation_shape[0])
@@ -36,13 +36,13 @@ class CarRacingTD3Agent(TD3BaseAgent):
 		self.lra = config["lra"]
 		self.lrc = config["lrc"]
 		
-		self.actor_opt = torch.optim.Adam(self.actor_net.parameters(), lr=self.lra)
-		self.critic_opt1 = torch.optim.Adam(self.critic_net1.parameters(), lr=self.lrc)
-		self.critic_opt2 = torch.optim.Adam(self.critic_net2.parameters(), lr=self.lrc)
+		self.actor_opt = torch.optim.AdamW(self.actor_net.parameters(), lr=self.lra)
+		self.critic_opt1 = torch.optim.AdamW(self.critic_net1.parameters(), lr=self.lrc)
+		self.critic_opt2 = torch.optim.AdamW(self.critic_net2.parameters(), lr=self.lrc)
 
 		# choose Gaussian noise or OU noise
 		self.noise = GaussianNoise(self.env.action_space.shape[0])
-		self.max_action = torch.tensor([1, 1], device=self.device)
+		self.max_action = torch.tensor([0.5, 1], device=self.device)
 		self.min_action = torch.tensor([0.1, -1], device=self.device)
 		self.noise_clip_rate = config['noise_clip_rate']
 	
