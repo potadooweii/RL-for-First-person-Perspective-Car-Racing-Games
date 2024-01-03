@@ -1,129 +1,188 @@
 from collections import deque
 import cv2
 
+from gymnasium import spaces
 from racecar_gym.env import RaceEnv
 import numpy as np
+from typing import Optional
+from dataclasses import dataclass
+
+
+@dataclass
+class CarRacingRewardCoefficient:
+    accumulated_progress_coeff: float = 0.1
+    velocity_coeff: float = 1e-5
+    position_coeff: float = 2e-3
+    collision_coeff: float = 0.5
+    
 
 class CarRacingEnvironment:
-	def __init__(self, scenario = "austria_competition", render_mode: str = "rgb_array_birds_eye", test=False, N_frame:int = 4, frame_skip: int = 4, continuous_action: bool = True):
-		
-		#
-		self.test = test
-		self.scenario = scenario # circle_cw_competition_collisionStop, austria_competition
-		reset_when_collision = True if "austria" in scenario else False
-		if self.test:
-			self.env = RaceEnv(scenario=scenario, render_mode='rgb_array_birds_eye', reset_when_collision=reset_when_collision)
-		else:
-			self.env = RaceEnv(scenario=scenario, render_mode=render_mode, reset_when_collision=reset_when_collision)
-		
-		self.discrete_to_continuous_action_map = {
-			0: [1, 0], # accelerate forward
-			1: [0.3, -0.3], # slowly turn left
-			2: [0.3, 0.3], # slowly turn right
-			3: [0.1, -1], # turn left
-			4: [0.1, 1], # turn right
-			5: [-1, 0] # brake
-		}
+    def __init__(
+        self,
+        scenario="austria_competition_collisionStop",
+        test: bool = False,
+        frame_stack_count: int = 4,
+        obs_size: int = 64,
+        frame_skip_count: int = 1,
+        discrete_action: bool = True,
+        motor_magnitude: float = 0.03,
+        reward_coeff: Optional[CarRacingRewardCoefficient] = None,
+    ):
+        # Init Environment
+        self.test = test
+        legal_scenarios = [
+            "circle_cw_competition_collisionstop",
+            "austria_competition",
+            "austria_competition_collisionstop",
+        ]
+        assert (
+            scenario.lower() in legal_scenarios
+        ), f"only {legal_scenarios} are available."
+        self.scenario = scenario.lower()
 
-		#
-		self.continuous_action = continuous_action
-		if self.continuous_action:
-			self.action_space = self.env.action_space
-		else:
-			self.action_space = np.array(list(self.discrete_to_continuous_action_map.keys()))
-		self.observation_space = self.env.observation_space
-		self.observation_shape = np.array([4,64,64])
-		self.ep_len = 0
-		self.frames = deque(maxlen=N_frame)
-		self.skip_flag = False # skip once every 2 frames
+        if self.test:
+            reset_when_collision = True if "austria" in self.scenario else False
+            self.env = RaceEnv(
+                scenario=scenario,
+                render_mode="rgb_array_birds_eye",
+                reset_when_collision=reset_when_collision,
+            )
+        else:
+            self.env = RaceEnv(
+                scenario=scenario,
+                render_mode="rgb_array_birds_eye",
+                reset_when_collision=False,
+            )
 
-		#
-		self.accumulated_progress = 0
+        # Rescale Observation
+        self.frame_stack_count = frame_stack_count
+        orignal_obs_size = self.env.observation_space.shape[-1]
+        assert (
+            obs_size <= orignal_obs_size
+        ), f"The max size of obs_size is {orignal_obs_size}"
+        self.obs_size = obs_size
+        self.observation_space = spaces.Box(
+            0,
+            255,
+            shape=(self.frame_stack_count, self.obs_size, self.obs_size),
+            dtype=np.uint8,
+        )
+        self.frame_skip_count = frame_skip_count
 
-	def step(self, action):
-		if not self.continuous_action:
-			action = self.discrete_to_continuous_action_map[action]
+        # Init action space
+        self.max_motor_magnitude = motor_magnitude
+        self.discrete_action = discrete_action
+        if self.discrete_action:
+            self.action_space = spaces.Discrete(2)
+            self._discrete_action_to_direction = {
+                0: np.array([motor_magnitude, 1]),
+                1: np.array([motor_magnitude, -1]),
+            }
+        else:
+            self.action_space = spaces.Box(
+                0.01, self.max_motor_magnitude, shape=(2,), dtype=np.float32
+            )
 
-		obs, reward, terminates, truncates, info = self.env.step(action)
-		delta_progress = reward
-		self.accumulated_progress += delta_progress
-		original_terminates = terminates
-		self.ep_len += 1
+        # Init Reward function
+        self.reward_coeff = CarRacingRewardCoefficient() if reward_coeff is None else reward_coeff
 
-		collision_penalty = 0.5 if info['wall_collision'] else 0
-		velocity_reward = np.sum(info['velocity'][:3] ** 2)
-		reward = delta_progress + 0.1 * self.accumulated_progress + 1e-5 * velocity_reward + 2e-3 * info['obstacle'] - collision_penalty
-		reward = -0.001 if delta_progress == 0 else reward
+        # Global variables
+        self.episode_len = 0
+        self.frames = deque(maxlen=self.frame_stack_count)
+        self.accumulated_progress = 0
 
-		obs = self.resize_obs(obs)
-		# save image for debugging
-		# filename = "images/image" + str(self.ep_len) + ".jpg"
-		# cv2.imwrite(filename, obs)
+    def step(self, action):
+        if self.discrete_action:
+            action = self._discrete_action_to_direction[action]
 
-		# frame stacking
-		if self.skip_flag:
-			self.skip_flag = False
-		else:
-			self.frames.append(obs)
-			self.skip_flag = True
-		obs = np.stack(self.frames, axis=0)
+        total_reward = 0
+        total_progress = 0
+        for _ in range(self.frame_skip_count):
+            obs, reward, terminates, truncates, info = self.env.step(action)
 
-		if self.test:
-			# enable this line to recover the original reward
-			reward = delta_progress
-			# enable this line to recover the original terminates signal, disable this to accerlate evaluation
-			# terminates = original_terminates
+            # Calculate reward
+            delta_progress = reward
+            total_progress += delta_progress
+            self.accumulated_progress += delta_progress
+            reward = self._calculate_reward(delta_progress, info, self.reward_coeff)
 
-		return obs, reward, terminates, truncates, info
-	
-	def reset(self, test: bool = False):
-		if test:
-			obs, info = self.env.reset()
-		else:
-			obs, info = self.env.reset(options=dict(mode='random'))
+            total_reward += reward
+            self.episode_len += 1
 
-		self.ep_len = 0
-		# init reward
-		self.accumulated_progress = 0
+        total_reward = 0 if total_progress == 0 else total_reward
+        total_reward = total_progress if self.test else total_reward
 
-		obs = self.resize_obs(obs)
-		# frame stacking
-		self.skip_flag = False
-		for _ in range(self.frames.maxlen):
-			self.frames.append(obs)
-		obs = np.stack(self.frames, axis=0)
+        # Frame Stacking
+        obs = self._resize_obs(obs)
+        # # save image for debugging
+        # filename = "images/image" + str(self.episode_len) + ".jpg"
+        # cv2.imwrite(filename, obs)
+        self.frames.append(obs)
+        obs = np.stack(self.frames, axis=0)
 
-		return obs, info
-	
-	def resize_obs(self, obs):
-		ret = np.transpose(obs, (1,2,0))
-		ret = cv2.cvtColor(ret, cv2.COLOR_BGR2GRAY) # 128x128
-		ret = cv2.resize(ret, (64, 64), interpolation=cv2.INTER_AREA) # 64x64
-		return ret
+        return obs, total_reward, terminates, truncates, info
 
-	def render(self):
-		self.env.render()
-	
-	def close(self):
-		self.env.close()
+    def reset(self, test: bool = False):
+        # Init Env & Global Variables
+        obs, info = (
+            self.env.reset() if test else self.env.reset(options=dict(mode="random"))
+        )
+        obs = self._resize_obs(obs)
+        self.frames = deque(
+            [obs for _ in range(self.frames.maxlen)], maxlen=self.frame_stack_count
+        )
+        obs = np.stack(self.frames, axis=0)
 
-if __name__ == '__main__':
-	env = CarRacingEnvironment(scenario="circle_cw_competition_collisionstop", continuous_action=False)
-	obs, info = env.reset()
-	done = 0
-	total_reward = 0
-	total_length = 0
-	t = 0
-	while not done:
-		t += 1
-		action = 0
-		obs, reward, terminates, truncates, info = env.step(action)
-		total_reward += reward
-		total_length += 1
-		env.render()
-		if terminates or truncates:
-			done = 1
+        self.episode_len = 0
+        self.accumulated_progress = 0
 
-	print("Total reward: ", total_reward)
-	print("Total length: ", total_length)
-	env.close()
+        return obs, info
+
+    def render(self):
+        self.env.render()
+
+    def close(self):
+        self.env.close()
+
+    def _resize_obs(self, obs):
+        ret = np.transpose(obs, (1, 2, 0))
+        ret = cv2.cvtColor(ret, cv2.COLOR_BGR2GRAY)  # 128x128
+        ret = cv2.resize(
+            ret, (self.obs_size, self.obs_size), interpolation=cv2.INTER_AREA
+        )
+        return ret
+
+    def _calculate_reward(self, delta_progress: float, info: dict, coefficients: CarRacingRewardCoefficient):
+        progress_reward = delta_progress + coefficients.accumulated_progress_coeff * self.accumulated_progress
+        position_reward = coefficients.position_coeff * info["obstacle"]
+        velocity_reward = coefficients.velocity_coeff * np.sum(info["velocity"][0] ** 2)
+        collision_penalty = coefficients.collision_coeff * int(info["wall_collision"])
+        
+        return (
+            progress_reward
+            + velocity_reward
+            + position_reward
+            - collision_penalty
+        )
+
+
+# if __name__ == '__main__':
+# 	env = CarRacingEnvironment(scenario="circle_cw_competition_collisionStop", discrete_action=True)
+# 	print("observation space: ", env.observation_space)
+# 	print("action space: ",env.action_space)
+# 	obs, info = env.reset()
+
+# 	done = False
+# 	total_reward = 0
+# 	total_length = 0
+# 	while not done:
+# 		action = 0
+# 		obs, reward, terminates, truncates, info = env.step(action)
+# 		total_reward += reward
+# 		total_length += 1
+# 		if terminates or truncates:
+# 			done = True
+
+# 	print("Total reward: ", total_reward)
+# 	print("Total length: ", total_length)
+# 	env.close()

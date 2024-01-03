@@ -196,8 +196,11 @@ class PER():  # stored as ( s, a, r, s_new, done ) in SumTree
             
             idxs[i]= index
             minibatch.append(data)
-            
-        return idxs, *(torch.tensor(np.asarray(x), dtype=torch.float, device=device) for x in zip(*minibatch)), torch.tensor(np.asarray(is_weights), dtype=torch.float, device=device)
+        
+        minibatch = (torch.tensor(np.asarray(x), dtype=torch.float, device=device) for x in zip(*minibatch))
+        is_weights = torch.tensor(np.asarray(is_weights), dtype=torch.float, device=device)
+
+        return idxs, *minibatch, is_weights
     
     def batch_update(self, idxs, errors):
         """
@@ -209,4 +212,3 @@ class PER():  # stored as ( s, a, r, s_new, done ) in SumTree
         
         for idx, p in zip(idxs, ps):
             self.tree.update(idx, p)
-    

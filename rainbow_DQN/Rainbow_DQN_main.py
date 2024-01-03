@@ -48,7 +48,7 @@ class Runner:
             if args.use_n_steps:
                 self.algorithm += "_N_steps"
 
-        self.writer = SummaryWriter(log_dir=f'/disk1/nfs/bwdong/rl_final/log/ver2/{args.exp_name}')
+        self.writer = SummaryWriter(log_dir=f'/disk1/nfs/bwdong/rl_final/log/ver3/{args.exp_name}')
 
         self.evaluate_num = 0  # Record the number of evaluations
         self.evaluate_rewards = []  # Record the rewards during the evaluating
@@ -123,7 +123,7 @@ class Runner:
         self.evaluate_rewards.append(evaluate_reward)
         print("total_steps:{} \t evaluate_reward:{} \t epsilon：{}".format(self.total_steps, evaluate_reward, self.epsilon))
         self.writer.add_scalar(f'Evaluate/Episode Reward', evaluate_reward, self.total_steps)
-        torch.save(self.agent.net.state_dict(), f'/disk1/nfs/bwdong/rl_final/log/ver2/{args.exp_name}/model_{self.total_steps}_{evaluate_reward}.pth')
+        torch.save(self.agent.net.state_dict(), f'/disk1/nfs/bwdong/rl_final/log/ver3/{args.exp_name}/model_{self.total_steps}_{round(evaluate_reward,2)}.pth')
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser("Hyperparameter Setting for DQN")
@@ -131,9 +131,9 @@ if __name__ == '__main__':
     parser.add_argument("--scenario", type=str, default="austria_competition")
     parser.add_argument("--max_train_steps", type=int, default=int(1e7), help=" Maximum number of training steps")
     parser.add_argument("--evaluate_freq", type=float, default=50, help="Evaluate the policy every 'evaluate_freq' steps")
-    parser.add_argument("--evaluate_times", type=float, default=1, help="Evaluate times")
+    parser.add_argument("--evaluate_times", type=float, default=10, help="Evaluate times")
 
-    parser.add_argument("--buffer_capacity", type=int, default=int(1e5), help="The maximum replay-buffer capacity ")
+    parser.add_argument("--buffer_capacity", type=int, default=int(2**13), help="The maximum replay-buffer capacity ")
     parser.add_argument("--batch_size", type=int, default=256, help="batch size")
     parser.add_argument("--lr", type=float, default=1e-4, help="Learning rate of actor")
     parser.add_argument("--gamma", type=float, default=0.99, help="Discount factor")
