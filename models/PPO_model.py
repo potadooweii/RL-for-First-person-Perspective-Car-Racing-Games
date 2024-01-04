@@ -25,28 +25,48 @@ class PPONet(nn.Module):
         self.motor_magnitude = motor_magnitude
 
         # Init NN
-        self.conv = (
-            BilinearCNN(channel_dim)
-            if backbone == "bilinear"
-            else BasicCNN(channel_dim, state_dim)
+        # self.conv = (
+        #     BilinearCNN(channel_dim)
+        #     if backbone == "bilinear"
+        #     else BasicCNN(channel_dim, state_dim)
+        # )
+        # self.feature_dim = self.conv.feature_dim
+        
+        self.conv = nn.Sequential(
+            nn.Conv2d(channel_dim, 16, kernel_size=3, padding=1),
+            nn.ELU(),
+            nn.Conv2d(16, 16, kernel_size=3, padding=1),
+            nn.ELU(),
+            nn.MaxPool2d(kernel_size=2),
+            nn.Conv2d(16, 16, kernel_size=3, padding=1),
+            nn.ELU(),
+            nn.Conv2d(16, 16, kernel_size=3, padding=1),
+            nn.ELU(),
+            nn.MaxPool2d(kernel_size=2),
+            nn.Conv2d(16, 32, kernel_size=3, padding=1),
+            nn.ELU(),
+            nn.Conv2d(32, 16, kernel_size=3, padding=1),
+            nn.ELU(),
+            nn.MaxPool2d(kernel_size=2),
         )
-        self.feature_dim = self.conv.feature_dim
 
         # actor
         self.actor = nn.Sequential(
-            nn.Linear(self.feature_dim, 256),
+            nn.Linear(16 * (state_dim // 8) ** 2, 256),
+            # nn.Linear(self.feature_dim, 256),
             nn.LayerNorm(256),
             nn.ELU(),
             nn.Linear(256, action_dim),
             nn.LayerNorm(action_dim),
             nn.Tanh(),
         )
-        if continuous:
-            self.log_std = nn.Parameter(torch.zeros(1, action_dim))
+        # if self.continuous:
+        self.log_std = nn.Parameter(torch.zeros(1, action_dim))
 
         # critic
         self.critic = nn.Sequential(
-            nn.Linear(self.feature_dim, 256),
+            nn.Linear(16 * (state_dim // 8) ** 2, 256),
+            # nn.Linear(self.feature_dim, 256),
             nn.LayerNorm(256),
             nn.ELU(),
             nn.Linear(256, 1),
@@ -55,9 +75,24 @@ class PPONet(nn.Module):
         if init_weights:
             self._initialize_weights()
 
-    def forward(self, x, eval=False, old_action: Optional[List] = None):
+    def forward(self, x):
         x = x.float() / 255.0
         x = self.conv(x)
+        x = torch.flatten(x, start_dim=1)
+
+        # get value
+        value = self.critic(x)
+        value = torch.squeeze(value)
+
+        # get action distribution
+        logits: torch.Tensor = self.actor(x)
+
+        return logits
+
+    def get_ppo_output(self, x, eval=False, old_action: Optional[List] = None):
+        x = x.float() / 255.0
+        x = self.conv(x)
+        x = torch.flatten(x, start_dim=1)
 
         # get value
         value = self.critic(x)

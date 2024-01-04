@@ -37,13 +37,15 @@ if __name__ == "__main__":
     parser.add_argument("--clip_epsilon", type=float, default=0.2)
     # evaluation
     parser.add_argument("--eval_interval", type=int, default=int(100))
-    parser.add_argument("--eval_episode", type=int, default=int(10))
+    parser.add_argument("--eval_episode", type=int, default=int(3))
     # hardware
     parser.add_argument("--device", type=str, default="cuda:1")
     args = parser.parse_args()
 
     agent = AtariPPOAgent(vars(args))
-    # agent.load('/disk1/nfs/bwdong/rl_final/log/ver4/PPO_austria_0.03/model_2778386_1.pth') good, evaluate wtih 0.04 motor!
+    # agent.load('/disk1/nfs/bwdong/rl_final/log/ver4/PPO_austria_0.03/model_2778386_1.pth') # good, evaluate wtih 0.04 motor!
+    # agent.get_grad_cam_video()
+    
     # agent.load('/disk1/nfs/bwdong/rl_final/log/ver4/PPO_austria_0.03_finetuned_1/model_82767_1.pth')
     # agent.load('/disk1/nfs/bwdong/rl_final/log/ver4/PPO_austria_0.04_finetuned_1/model_137800_1.pth')
     # agent.load('/disk1/nfs/bwdong/rl_final/log/ver4/PPO_austria_0.05_finetuned_1/model_769045_1.pth')

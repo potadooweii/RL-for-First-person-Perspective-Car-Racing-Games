@@ -1,9 +1,10 @@
 import torch
 import torch.nn as nn
 import numpy as np
-from ppo.base_agent import PPOBaseAgent
+from PPO.base_agent import PPOBaseAgent
 from models.PPO_model import PPONet
 from environment_wrapper.racecar_env import CarRacingEnvironment
+import cv2
 
 
 class AtariPPOAgent(PPOBaseAgent):
@@ -52,7 +53,7 @@ class AtariPPOAgent(PPOBaseAgent):
         ).unsqueeze(0)
 
         with torch.no_grad():
-            action, action_logprob, value, _ = self.net(observation, eval=eval)
+            action, action_logprob, value, _ = self.net.get_ppo_output(observation, eval=eval)
 
         return (
             action.detach().cpu().numpy(),
@@ -113,7 +114,7 @@ class AtariPPOAgent(PPOBaseAgent):
                 v_train_batch = v_train_batch.to(self.device, dtype=torch.float32)
 
                 # calculate loss and update network
-                _, action_logprob, value, entropy = self.net(
+                _, action_logprob, value, entropy = self.net.get_ppo_output(
                     ob_train_batch, old_action=ac_train_batch.squeeze()
                 )
                 logp_pi_train_batch = logp_pi_train_batch.squeeze()
@@ -173,3 +174,68 @@ class AtariPPOAgent(PPOBaseAgent):
 			Entropy: {total_entropy / loss_counter}  \
 			"
         )
+    
+    def get_grad_cam_video(self):
+        from pytorch_grad_cam import GradCAM
+        from pytorch_grad_cam.utils.image import show_cam_on_image
+
+        imgs = []
+        for i in range(self.eval_episode):
+            observation, info = self.test_env.reset(test=True)
+            total_reward = 0
+            while True:
+                model = self.net
+                target_layers = [model.conv]
+                
+                obs_for_cam = torch.tensor(
+                    np.asarray(observation), dtype=torch.float, device=self.device
+                ).unsqueeze(0)
+                cam = GradCAM(model=model, target_layers=target_layers)
+                grayscale_cam = cam(input_tensor=obs_for_cam, targets=None)
+                grayscale_cam = grayscale_cam[0, :]
+                img = cv2.cvtColor(obs_for_cam[0,0,:,:].cpu().detach().numpy(), cv2.COLOR_GRAY2RGB)
+                grad_cam_img = show_cam_on_image(img/255, grayscale_cam, use_rgb=False)
+                
+                # Get the images
+                img1 = self.test_env.env.env.force_render(render_mode='rgb_array_higher_birds_eye', width=540, height=540,
+                                            position=np.array([4.89, -9.30, -3.42]), fov=120)
+                img2 = self.test_env.env.env.force_render(render_mode='rgb_array_birds_eye', width=270, height=270)
+                img3 = self.test_env.env.env.force_render(render_mode='rgb_array_follow', width=128, height=128)
+                img4 = cv2.resize(
+                    grad_cam_img, (128, 128), interpolation=cv2.INTER_AREA
+                )
+
+                # Combine the images
+                img = np.zeros((540, 810, 3), dtype=np.uint8)
+                img[0:540, 0:540, :] = img1
+                img[:270, 540:810, :] = img2
+                img[270 + 10:270 + 128 + 10, 540 + 7:540 + 128 + 7, :] = img3
+                img[270 + 10:270 + 128 + 10, 540 + 128 + 14:540 + 128 + 128 + 14, :] = img4
+                imgs.append(img)
+                
+                action, _, _ = self.decide_agent_actions(observation, eval=True)
+                action = action if self.continuous else int(action)
+                (
+                    next_observation,
+                    reward,
+                    terminate,
+                    truncate,
+                    info,
+                ) = self.test_env.step(action)
+                total_reward += reward
+                if terminate or truncate:
+                    print(f"episode {i+1} reward: {total_reward}")
+                    break
+
+                observation = next_observation
+            self._record_video(f"{i+1}_gradcam.mp4", imgs)
+
+    def _record_video(self, filename: str, imgs: list):
+        height, width, layers = imgs[0].shape
+        # noinspection PyUnresolvedReferences
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        video = cv2.VideoWriter(filename, fourcc, 30, (width, height))
+        for image in imgs:
+            video.write(image)
+        cv2.destroyAllWindows()
+        video.release()

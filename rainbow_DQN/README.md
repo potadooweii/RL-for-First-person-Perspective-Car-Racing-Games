@@ -1,3 +1,5 @@
+`The implementation was modified from https://github.com/Lizhi-sjtu/DRL-code-pytorch/Rainbow_DQN`
+
 # Rainbow DQN
 This is a concise Pytorch implementation of Rainbow DQN, including Double Q-learning, Dueling network, Noisy network, PER and n-steps Q-learning.<br />
 
