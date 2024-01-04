@@ -43,10 +43,4 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     agent = AtariPPOAgent(vars(args))
-    # agent.load('/disk1/nfs/bwdong/rl_final/log/ver4/PPO_austria_0.03/model_2778386_1.pth') # good, evaluate wtih 0.04 motor!
-    # agent.get_grad_cam_video()
-    
-    # agent.load('/disk1/nfs/bwdong/rl_final/log/ver4/PPO_austria_0.03_finetuned_1/model_82767_1.pth')
-    # agent.load('/disk1/nfs/bwdong/rl_final/log/ver4/PPO_austria_0.04_finetuned_1/model_137800_1.pth')
-    # agent.load('/disk1/nfs/bwdong/rl_final/log/ver4/PPO_austria_0.05_finetuned_1/model_769045_1.pth')
     agent.train()
