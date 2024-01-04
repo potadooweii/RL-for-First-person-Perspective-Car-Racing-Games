@@ -24,19 +24,19 @@ Python==3.10
 All algorithms in this project are implemented using <img style="inline;" src="https://img.shields.io/badge/PyTorch-%23EE4C2C.svg?style=flat&logo=pytorch&logoColor=white">
 
 
-## Used Algorithm
+## Used Algorithms
 - Value-based
-    * Rainbow DQN [1]
+    * (discrete) Rainbow DQN [1]
 - Actor-Critic
-    * PPO [2]
-    * TD3 (Twin Delayed DDPG) [3]
+    * (discrete + continuous) PPO [2]
+    * (continuous) TD3 (Twin Delayed DDPG) [3]
 
 ## Result
 ### Best Result
 | |Rainbow DQN|PPO|TD3|
 |---|----|---|---|
-|Best progress (circle)|~|**1.66**|~|
-|Best progress (austria)|~|**2.23**|~|  
+|Best progress (circle)|1.31|**1.66**|1.17|
+|Best progress (austria)|0.29|**2.23**|0.14|  
 
 The performance of PPO consistently placed within the top `15%` of the course.
 
@@ -44,7 +44,12 @@ The performance of PPO consistently placed within the top `15%` of the course.
 ![circle](assets/circle.gif)
 ![austria](assets/austria.gif)
 
-
+### Visualization
+|Patterns|Visualization|
+|----|---|
+|Turning|![turning](assets/turn.png)|
+|Heading Left|![heading_left](assets/hl.png)|  
+|Heading Right|![heading_right](assets/hr.png)|
 ## Reference
 [1] Hessel, Matteo, et al. "Rainbow: Combining improvements in deep reinforcement learning." Proceedings of the AAAI conference on artificial intelligence. Vol. 32. No. 1. 2018.  
 [2] Schulman, John, et al. "Proximal policy optimization algorithms." arXiv preprint arXiv:1707.06347 (2017).  
