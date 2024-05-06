@@ -1,5 +1,5 @@
 
-# Reinforcement Leanring for First-person perspective Car Racing Games
+# Reinforcement Learning for First-person perspective Car Racing Games
 
 This project serves as the final project for the "Selected Topics in Reinforcement Learning" course at NYCU, under the instruction of Professor _I-Chen Wu_.
 
